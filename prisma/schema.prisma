@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model artiststyles {
+  id       Int    @id @default(autoincrement())
+  artistId Int
+  styleId  Int
+  users    users  @relation(fields: [artistId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "artiststyles_ibfk_1")
+  styles   styles @relation(fields: [styleId], references: [styleId], onDelete: NoAction, onUpdate: NoAction, map: "artiststyles_ibfk_2")
+
+  @@index([artistId], map: "artistId")
+  @@index([styleId], map: "styleId")
+}
+
+model availability {
+  availabilityId Int      @id @default(autoincrement())
+  artistId       Int
+  dateTime       DateTime @db.DateTime(0)
+  users          users    @relation(fields: [artistId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "availability_ibfk_1")
+
+  @@index([artistId], map: "artistId")
+}
+
+model bookings {
+  bookingId                      Int             @id @default(autoincrement())
+  userId                         Int
+  artistId                       Int
+  dateTime                       DateTime        @db.DateTime(0)
+  statusId                       Int
+  createdAt                      DateTime?       @default(now()) @db.DateTime(0)
+  comment                        String?         @db.Text
+  price                          Decimal?        @db.Decimal(10, 2)
+  users_bookings_userIdTousers   users           @relation("bookings_userIdTousers", fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "bookings_ibfk_1")
+  users_bookings_artistIdTousers users           @relation("bookings_artistIdTousers", fields: [artistId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "bookings_ibfk_2")
+  bookingstatuses                bookingstatuses @relation(fields: [statusId], references: [statusId], onDelete: NoAction, onUpdate: NoAction, map: "bookings_ibfk_3")
+  reviews                        reviews[]
+
+  @@index([artistId], map: "artistId")
+  @@index([statusId], map: "statusId")
+  @@index([userId], map: "userId")
+}
+
+model bookingstatuses {
+  statusId Int        @id @default(autoincrement())
+  status   String     @db.VarChar(50)
+  bookings bookings[]
+}
+
+model cities {
+  cityId      Int     @id @default(autoincrement())
+  name        String  @db.VarChar(100)
+  countryName String  @db.VarChar(100)
+  users       users[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model reviews {
+  reviewId  Int       @id @default(autoincrement())
+  userId    Int
+  bookingId Int
+  createdAt DateTime? @default(now()) @db.DateTime(0)
+  rating    Int?      @db.TinyInt
+  comment   String?   @db.Text
+  users     users     @relation(fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "reviews_ibfk_1")
+  bookings  bookings  @relation(fields: [bookingId], references: [bookingId], onDelete: NoAction, onUpdate: NoAction, map: "reviews_ibfk_2")
+
+  @@index([bookingId], map: "bookingId")
+  @@index([userId], map: "userId")
+}
+
+model styles {
+  styleId      Int            @id @default(autoincrement())
+  styleName    String         @db.VarChar(100)
+  description  String?        @db.Text
+  artiststyles artiststyles[]
+}
+
+model tattoos {
+  tattooId   Int     @id @default(autoincrement())
+  artistId   Int
+  tattooName String  @db.VarChar(100)
+  imageURL   String? @db.VarChar(255)
+  users      users   @relation(fields: [artistId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "tattoos_ibfk_1")
+
+  @@index([artistId], map: "artistId")
+}
+
+model users {
+  userId                            Int            @id @default(autoincrement())
+  cityId                            Int?
+  email                             String         @unique(map: "email") @db.VarChar(255)
+  phoneNumber                       String?        @db.VarChar(30)
+  firstName                         String         @db.VarChar(100)
+  lastName                          String         @db.VarChar(100)
+  passwordHash                      String         @db.VarChar(255)
+  birthDate                         DateTime?      @db.Date
+  isArtist                          Boolean?       @default(false)
+  artistDescription                 String?        @db.Text
+  streetAddress                     String?        @db.VarChar(255)
+  instagramLink                     String?        @db.VarChar(255)
+  portfolioLink                     String?        @db.VarChar(255)
+  appointmentPrice                  Decimal?       @db.Decimal(10, 2)
+  imageURL                          String?        @db.VarChar(255)
+  artiststyles                      artiststyles[]
+  availability                      availability[]
+  bookings_bookings_userIdTousers   bookings[]     @relation("bookings_userIdTousers")
+  bookings_bookings_artistIdTousers bookings[]     @relation("bookings_artistIdTousers")
+  reviews                           reviews[]
+  tattoos                           tattoos[]
+  cities                            cities?        @relation(fields: [cityId], references: [cityId], onDelete: NoAction, onUpdate: NoAction, map: "users_ibfk_1")
+
+  @@index([cityId], map: "cityId")
+}
