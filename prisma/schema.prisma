@@ -18,19 +18,14 @@ model artiststyles {
   @@index([styleId], map: "styleId")
 }
 
-model availability {
-  availabilityId Int      @id @default(autoincrement())
-  artistId       Int
-  dateTime       DateTime @db.DateTime(0)
-  users          users    @relation(fields: [artistId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "availability_ibfk_1")
-
-  @@index([artistId], map: "artistId")
-}
-
 model bookings {
   bookingId                      Int             @id @default(autoincrement())
   userId                         Int
   artistId                       Int
+  size                           String?         @db.VarChar(50)
+  placement                      String?         @db.VarChar(100)
+  referenceImageURL              String?         @db.VarChar(255)
+  isColor                        Boolean?        @default(false)
   dateTime                       DateTime        @db.DateTime(0)
   statusId                       Int
   createdAt                      DateTime?       @default(now()) @db.DateTime(0)
@@ -71,7 +66,6 @@ model reviews {
   bookings  bookings  @relation(fields: [bookingId], references: [bookingId], onDelete: NoAction, onUpdate: NoAction, map: "reviews_ibfk_2")
 
   @@index([bookingId], map: "bookingId")
-  @@index([userId], map: "userId")
 }
 
 model styles {
@@ -82,38 +76,72 @@ model styles {
 }
 
 model tattoos {
-  tattooId   Int     @id @default(autoincrement())
+  tattooId   Int         @id @default(autoincrement())
   artistId   Int
-  tattooName String  @db.VarChar(100)
-  imageURL   String? @db.VarChar(255)
-  users      users   @relation(fields: [artistId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "tattoos_ibfk_1")
+  tattooName String?     @db.VarChar(100)
+  imageURL   String?     @db.VarChar(255)
+  favorites  favorites[]
+  users      users       @relation(fields: [artistId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "tattoos_ibfk_1")
 
   @@index([artistId], map: "artistId")
 }
 
 model users {
-  userId                            Int            @id @default(autoincrement())
+  userId                            Int                @id @default(autoincrement())
   cityId                            Int?
-  email                             String         @unique(map: "email") @db.VarChar(255)
-  phoneNumber                       String?        @db.VarChar(30)
-  firstName                         String         @db.VarChar(100)
-  lastName                          String         @db.VarChar(100)
-  passwordHash                      String         @db.VarChar(255)
-  birthDate                         DateTime?      @db.Date
-  isArtist                          Boolean?       @default(false)
-  artistDescription                 String?        @db.Text
-  streetAddress                     String?        @db.VarChar(255)
-  instagramLink                     String?        @db.VarChar(255)
-  portfolioLink                     String?        @db.VarChar(255)
-  appointmentPrice                  Decimal?       @db.Decimal(10, 2)
-  imageURL                          String?        @db.VarChar(255)
+  email                             String             @unique(map: "email") @db.VarChar(255)
+  phoneNumber                       String?            @db.VarChar(30)
+  firstName                         String             @db.VarChar(100)
+  lastName                          String             @db.VarChar(100)
+  password                          String             @db.VarChar(255)
+  birthDate                         DateTime?          @db.Date
+  isArtist                          Boolean?           @default(false)
+  artistDescription                 String?            @db.Text
+  streetAddress                     String?            @db.VarChar(255)
+  instagramLink                     String?            @db.VarChar(255)
+  portfolioLink                     String?            @db.VarChar(255)
+  imageURL                          String?            @db.VarChar(255)
+  membershipFee                     Decimal?           @default(0.00) @db.Decimal(10, 2)
+  appointmentslots                  appointmentslots[]
   artiststyles                      artiststyles[]
-  availability                      availability[]
-  bookings_bookings_userIdTousers   bookings[]     @relation("bookings_userIdTousers")
-  bookings_bookings_artistIdTousers bookings[]     @relation("bookings_artistIdTousers")
+  bookings_bookings_userIdTousers   bookings[]         @relation("bookings_userIdTousers")
+  bookings_bookings_artistIdTousers bookings[]         @relation("bookings_artistIdTousers")
+  favorites                         favorites[]
   reviews                           reviews[]
+  savedar                           savedar[]
   tattoos                           tattoos[]
-  cities                            cities?        @relation(fields: [cityId], references: [cityId], onDelete: NoAction, onUpdate: NoAction, map: "users_ibfk_1")
+  cities                            cities?            @relation(fields: [cityId], references: [cityId], onDelete: NoAction, onUpdate: NoAction, map: "users_ibfk_1")
 
   @@index([cityId], map: "cityId")
+}
+
+model appointmentslots {
+  slotId   Int      @id @default(autoincrement())
+  artistId Int
+  dateTime DateTime @db.DateTime(0)
+  duration Int
+  isBooked Boolean? @default(false)
+  users    users    @relation(fields: [artistId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "appointmentslots_ibfk_1")
+
+  @@unique([artistId, dateTime], map: "artistId")
+}
+
+model favorites {
+  favId    Int     @id @default(autoincrement())
+  userId   Int
+  tattooId Int
+  users    users   @relation(fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "favorites_ibfk_1")
+  tattoos  tattoos @relation(fields: [tattooId], references: [tattooId], onDelete: NoAction, onUpdate: NoAction, map: "favorites_ibfk_2")
+
+  @@unique([userId, tattooId], map: "userId")
+  @@index([tattooId], map: "tattooId")
+}
+
+model savedar {
+  savedId  Int    @id @default(autoincrement())
+  userId   Int
+  imageURL String @db.VarChar(255)
+  users    users  @relation(fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "savedar_ibfk_1")
+
+  @@unique([userId, imageURL], map: "userId")
 }
