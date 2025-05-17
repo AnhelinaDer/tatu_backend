@@ -1,6 +1,7 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const authenticateToken = require('../middleware/authMiddleware');
+const bcrypt = require('bcryptjs');
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -314,6 +315,111 @@ router.delete('/me', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to delete account',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Update user information
+router.patch('/me', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      phoneNumber,
+      birthDate
+    } = req.body;
+
+    // Validate email format if provided
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid email format'
+        });
+      }
+
+      // Check if email is already in use by another user
+      const existingUser = await prisma.users.findFirst({
+        where: {
+          email,
+          NOT: {
+            userId: userId
+          }
+        }
+      });
+
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: 'Email is already in use'
+        });
+      }
+    }
+
+    // Prepare update data
+    const updateData = {};
+
+    // Only include fields that are provided
+    if (email) updateData.email = email;
+    if (firstName) updateData.firstName = firstName;
+    if (lastName) updateData.lastName = lastName;
+    if (phoneNumber) updateData.phoneNumber = phoneNumber;
+    if (birthDate) updateData.birthDate = new Date(birthDate);
+    
+    // Handle password update separately with hashing
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateData.password = password;//hashedPassword;
+    }
+
+    // Update user
+    const updatedUser = await prisma.users.update({
+      where: {
+        userId: userId
+      },
+      data: updateData,
+      select: {
+        userId: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phoneNumber: true,
+        birthDate: true
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'User information updated successfully',
+      user: {
+        userId: updatedUser.userId,
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        phoneNumber: updatedUser.phoneNumber,
+        birthDate: updatedUser.birthDate
+      }
+    });
+
+  } catch (err) {
+    console.error('PATCH /users/me error:', err);
+    
+    // Handle specific Prisma errors
+    if (err.code === 'P2002') {
+      return res.status(409).json({
+        success: false,
+        message: 'Email is already in use'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user information',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
