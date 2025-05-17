@@ -160,4 +160,205 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get specific artist by ID with all details
+router.get('/:id', async (req, res) => {
+  try {
+    const artistId = parseInt(req.params.id);
+
+    if (isNaN(artistId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid artist ID format'
+      });
+    }
+
+    const artist = await prisma.artists.findUnique({
+      where: {
+        artistId: artistId
+      },
+      select: {
+        artistId: true,
+        users: {
+          select: {
+            userId: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true
+          }
+        },
+        cities: {
+          select: {
+            cityId: true,
+            name: true,
+            countryName: true
+          }
+        },
+        artistDescription: true,
+        streetAddress: true,
+        instagramLink: true,
+        portfolioLink: true,
+        imageURL: true,
+        membershipFee: true,
+        createdAt: true,
+        // Get all styles
+        artiststyles: {
+          select: {
+            styles: {
+              select: {
+                styleId: true,
+                styleName: true,
+                description: true
+              }
+            }
+          }
+        },
+        // Get all tattoos with their styles
+        tattoos: {
+          select: {
+            tattooId: true,
+            tattooName: true,
+            imageURL: true,
+            tattoostyles: {
+              select: {
+                styles: {
+                  select: {
+                    styleId: true,
+                    styleName: true
+                  }
+                }
+              }
+            }
+          }
+        },
+        // Get upcoming appointments
+        appointmentslots: {
+          where: {
+            dateTime: {
+              gte: new Date()
+            },
+            isBooked: false
+          },
+          select: {
+            slotId: true,
+            dateTime: true,
+            duration: true
+          },
+          orderBy: {
+            dateTime: 'asc'
+          }
+        },
+        // Get reviews through bookings
+        bookings_bookings_artistIdTousers: {
+          where: {
+            reviews: {
+              some: {}
+            }
+          },
+          select: {
+            reviews: {
+              select: {
+                reviewId: true,
+                rating: true,
+                comment: true,
+                createdAt: true,
+                users: {
+                  select: {
+                    firstName: true,
+                    lastName: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!artist) {
+      return res.status(404).json({
+        success: false,
+        message: 'Artist not found'
+      });
+    }
+
+    // Calculate average rating
+    const reviews = artist.bookings_bookings_artistIdTousers.flatMap(booking => booking.reviews);
+    const totalRatings = reviews.reduce((sum, review) => sum + (review.rating || 0), 0);
+    const averageRating = reviews.length > 0 ? totalRatings / reviews.length : null;
+
+    // Format the response
+    const formattedArtist = {
+      artistId: artist.artistId,
+      user: {
+        userId: artist.users.userId,
+        firstName: artist.users.firstName,
+        lastName: artist.users.lastName,
+        email: artist.users.email,
+        phoneNumber: artist.users.phoneNumber
+      },
+      location: artist.cities ? {
+        cityId: artist.cities.cityId,
+        city: artist.cities.name,
+        country: artist.cities.countryName,
+        address: artist.streetAddress
+      } : null,
+      description: artist.artistDescription,
+      social: {
+        instagram: artist.instagramLink,
+        portfolio: artist.portfolioLink
+      },
+      imageURL: artist.imageURL,
+      membershipFee: artist.membershipFee,
+      createdAt: artist.createdAt,
+      styles: artist.artiststyles.map(as => ({
+        id: as.styles.styleId,
+        name: as.styles.styleName,
+        description: as.styles.description
+      })),
+      tattoos: artist.tattoos.map(tattoo => ({
+        id: tattoo.tattooId,
+        name: tattoo.tattooName,
+        imageURL: tattoo.imageURL,
+        styles: tattoo.tattoostyles.map(ts => ({
+          id: ts.styles.styleId,
+          name: ts.styles.styleName
+        }))
+      })),
+      availableSlots: artist.appointmentslots.map(slot => ({
+        id: slot.slotId,
+        dateTime: slot.dateTime,
+        duration: slot.duration
+      })),
+      reviews: {
+        average: averageRating,
+        total: reviews.length,
+        items: reviews.map(review => ({
+          id: review.reviewId,
+          rating: review.rating,
+          comment: review.comment,
+          createdAt: review.createdAt,
+          reviewer: {
+            firstName: review.users.firstName,
+            lastName: review.users.lastName
+          }
+        }))
+      }
+    };
+
+    res.status(200).json({
+      success: true,
+      artist: formattedArtist
+    });
+
+  } catch (err) {
+    console.error('GET /artists/:id error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch artist details',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
 module.exports = router;
