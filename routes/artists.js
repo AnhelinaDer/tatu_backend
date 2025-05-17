@@ -1,5 +1,6 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
+const authenticateToken = require('../middleware/authMiddleware');
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -356,6 +357,168 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch artist details',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Update artist profile
+router.patch('/:id', authenticateToken, async (req, res) => {
+  try {
+    const artistId = parseInt(req.params.id);
+    const userId = req.user.userId;
+
+    // Verify the artist exists and belongs to the authenticated user
+    const existingArtist = await prisma.artists.findUnique({
+      where: { artistId },
+      select: { userId: true }
+    });
+
+    if (!existingArtist) {
+      return res.status(404).json({
+        success: false,
+        message: 'Artist not found'
+      });
+    }
+
+    // Check if the authenticated user owns this artist profile
+    if (existingArtist.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to update this artist profile'
+      });
+    }
+
+    const {
+      cityId,
+      artistDescription,
+      streetAddress,
+      instagramLink,
+      portfolioLink,
+      imageURL,
+      styleIds
+    } = req.body;
+
+    // Start a transaction to handle both artist update and styles update
+    const updatedArtist = await prisma.$transaction(async (prisma) => {
+      // Prepare artist update data
+      const updateData = {};
+
+      // Only include fields that are provided
+      if (cityId) updateData.cityId = parseInt(cityId);
+      if (artistDescription !== undefined) updateData.artistDescription = artistDescription;
+      if (streetAddress !== undefined) updateData.streetAddress = streetAddress;
+      if (instagramLink !== undefined) updateData.instagramLink = instagramLink;
+      if (portfolioLink !== undefined) updateData.portfolioLink = portfolioLink;
+      if (imageURL !== undefined) updateData.imageURL = imageURL;
+
+      // Update artist profile
+      const artist = await prisma.artists.update({
+        where: { artistId },
+        data: updateData,
+        select: {
+          artistId: true,
+          cityId: true,
+          cities: {
+            select: {
+              name: true,
+              countryName: true
+            }
+          },
+          artistDescription: true,
+          streetAddress: true,
+          instagramLink: true,
+          portfolioLink: true,
+          imageURL: true,
+          membershipFee: true,
+          users: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true
+            }
+          }
+        }
+      });
+
+      // Update artist styles if provided
+      if (styleIds && Array.isArray(styleIds)) {
+        // Remove existing styles
+        await prisma.artiststyles.deleteMany({
+          where: { artistId }
+        });
+
+        // Add new styles
+        if (styleIds.length > 0) {
+          const styleLinks = styleIds.map(styleId => ({
+            artistId,
+            styleId: parseInt(styleId)
+          }));
+
+          await prisma.artiststyles.createMany({
+            data: styleLinks
+          });
+        }
+
+        // Get updated styles
+        const styles = await prisma.artiststyles.findMany({
+          where: { artistId },
+          select: {
+            styles: {
+              select: {
+                styleId: true,
+                styleName: true,
+                description: true
+              }
+            }
+          }
+        });
+
+        return { ...artist, styles };
+      }
+
+      return artist;
+    });
+
+    // Format the response
+    const formattedArtist = {
+      artistId: updatedArtist.artistId,
+      user: {
+        firstName: updatedArtist.users.firstName,
+        lastName: updatedArtist.users.lastName,
+        email: updatedArtist.users.email
+      },
+      location: {
+        cityId: updatedArtist.cityId,
+        city: updatedArtist.cities?.name,
+        country: updatedArtist.cities?.countryName,
+        address: updatedArtist.streetAddress
+      },
+      description: updatedArtist.artistDescription,
+      social: {
+        instagram: updatedArtist.instagramLink,
+        portfolio: updatedArtist.portfolioLink
+      },
+      imageURL: updatedArtist.imageURL,
+      membershipFee: updatedArtist.membershipFee,
+      styles: updatedArtist.styles ? updatedArtist.styles.map(style => ({
+        id: style.styles.styleId,
+        name: style.styles.styleName,
+        description: style.styles.description
+      })) : undefined
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Artist profile updated successfully',
+      artist: formattedArtist
+    });
+
+  } catch (err) {
+    console.error('PATCH /artists/:id error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update artist profile',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
