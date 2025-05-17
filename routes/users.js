@@ -92,14 +92,27 @@ router.get('/me', authenticateToken, async (req, res) => {
             imageURL: true
           }
         },
+        // Get user's favorite tattoos with their details
         favorites: {
           select: {
             favId: true,
+            tattooId: true,
             tattoos: {
               select: {
                 tattooId: true,
                 tattooName: true,
                 imageURL: true,
+                users: {
+                  select: {
+                    artistId: true,
+                    users: {
+                      select: {
+                        firstName: true,
+                        lastName: true
+                      }
+                    }
+                  }
+                },
                 tattoostyles: {
                   select: {
                     styles: {
@@ -172,19 +185,23 @@ router.get('/me', authenticateToken, async (req, res) => {
         id: ar.savedId,
         imageURL: ar.imageURL
       })),
-      // Include favorites
+      // Format favorites
       favorites: user.favorites.map(fav => ({
         id: fav.favId,
-        imageURL: fav.imageURL,
-        tattoos: fav.tattoos.map(tattoo => ({
-          id: tattoo.tattooId,
-          name: tattoo.tattooName,
-          imageURL: tattoo.imageURL,
-          styles: tattoo.tattoostyles.map(ts => ({
+        tattoo: {
+          id: fav.tattoos.tattooId,
+          name: fav.tattoos.tattooName,
+          imageURL: fav.tattoos.imageURL,
+          artist: {
+            artistId: fav.tattoos.users.artistId,
+            firstName: fav.tattoos.users.users.firstName,
+            lastName: fav.tattoos.users.users.lastName
+          },
+          styles: fav.tattoos.tattoostyles.map(ts => ({
             id: ts.styles.styleId,
             name: ts.styles.styleName
           }))
-        }))
+        }
       }))
     };
 
@@ -198,6 +215,105 @@ router.get('/me', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch user information',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Delete user account and all associated data
+router.delete('/me', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Start a transaction to ensure all related data is deleted
+    await prisma.$transaction(async (prisma) => {
+      // If user is an artist, delete artist-related data first
+      const artist = await prisma.artists.findFirst({
+        where: { userId }
+      });
+
+      if (artist) {
+        // Delete artist styles
+        await prisma.artiststyles.deleteMany({
+          where: { artistId: artist.artistId }
+        });
+
+        // Delete artist's tattoos and their styles
+        const tattoos = await prisma.tattoos.findMany({
+          where: { artistId: artist.artistId }
+        });
+
+        for (const tattoo of tattoos) {
+          // Delete tattoo styles
+          await prisma.tattoostyles.deleteMany({
+            where: { tattooId: tattoo.tattooId }
+          });
+
+          // Delete favorites referencing this tattoo
+          await prisma.favorites.deleteMany({
+            where: { tattooId: tattoo.tattooId }
+          });
+        }
+
+        // Delete all tattoos
+        await prisma.tattoos.deleteMany({
+          where: { artistId: artist.artistId }
+        });
+
+        // Delete appointment slots
+        await prisma.appointmentslots.deleteMany({
+          where: { artistId: artist.artistId }
+        });
+
+        // Delete artist profile
+        await prisma.artists.delete({
+          where: { artistId: artist.artistId }
+        });
+      }
+
+      // Delete user's bookings and related data
+      const bookings = await prisma.bookings.findMany({
+        where: { userId }
+      });
+
+      for (const booking of bookings) {
+        // Delete reviews for the booking
+        await prisma.reviews.deleteMany({
+          where: { bookingId: booking.bookingId }
+        });
+      }
+
+      // Delete all bookings
+      await prisma.bookings.deleteMany({
+        where: { userId }
+      });
+
+      // Delete saved AR images
+      await prisma.savedar.deleteMany({
+        where: { userId }
+      });
+
+      // Delete favorites
+      await prisma.favorites.deleteMany({
+        where: { userId }
+      });
+
+      // Finally, delete the user
+      await prisma.users.delete({
+        where: { userId }
+      });
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Account and all associated data successfully deleted'
+    });
+
+  } catch (err) {
+    console.error('DELETE /users/me error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete account',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
