@@ -8,6 +8,8 @@ const cors = require('cors');
 const registerRouter = require('./routes/register');
 const loginRouter = require('./routes/login');
 const usersRouter = require('./routes/users');
+const artistsRouter = require('./routes/artists');
+const stripeRouter = require('./routes/stripe');
 
 const app = express();
 
@@ -25,7 +27,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/register', registerRouter);
 app.use('/login', loginRouter);
 app.use('/users', usersRouter);
-
+app.use('/artists', artistsRouter);
+app.use('/stripe', stripeRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
