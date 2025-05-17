@@ -76,7 +76,7 @@ router.post('/artist', async (req, res) => {
     }
 
     // Create user
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = data.password;//await bcrypt.hash(password, 10);
     const user = await prisma.users.create({
       data: {
         email: data.email,
