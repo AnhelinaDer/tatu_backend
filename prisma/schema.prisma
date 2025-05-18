@@ -22,21 +22,22 @@ model bookings {
   bookingId                      Int              @id @default(autoincrement())
   userId                         Int
   artistId                       Int
-  slotId                         Int
   statusId                       Int
   createdAt                      DateTime?        @default(now()) @db.DateTime(0)
-  size                           String?          @db.VarChar(50)
-  isColor                        Boolean?         @default(false)
-  placementId                    Int?
-  referenceURL                   String?          @db.VarChar(255)
   comment                        String?          @db.Text
   price                          Decimal?         @db.Decimal(10, 2)
+  isColor                        Boolean?         @default(false)
   commissionAmount               Decimal?         @db.Decimal(10, 2)
+  placementId                    Int?
+  referenceURL                   String?          @db.VarChar(255)
+  slotId                         Int
+  sizeId                         Int?
   users_bookings_userIdTousers   users            @relation("bookings_userIdTousers", fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction, map: "bookings_ibfk_1")
   users_bookings_artistIdTousers artists          @relation("bookings_artistIdTousers", fields: [artistId], references: [artistId], onDelete: NoAction, onUpdate: NoAction, map: "bookings_ibfk_2")
   appointmentslots               appointmentslots @relation(fields: [slotId], references: [slotId], onDelete: NoAction, onUpdate: NoAction, map: "bookings_ibfk_3")
   bookingstatuses                bookingstatuses  @relation(fields: [statusId], references: [statusId], onDelete: NoAction, onUpdate: NoAction, map: "bookings_ibfk_4")
   placements                     placements?      @relation(fields: [placementId], references: [placementId], onDelete: NoAction, onUpdate: NoAction, map: "bookings_ibfk_5")
+  sizes                          sizes?           @relation(fields: [sizeId], references: [sizeId], onDelete: NoAction, onUpdate: NoAction, map: "bookings_ibfk_6")
   reviews                        reviews[]
 
   @@index([artistId], map: "artistId")
@@ -44,6 +45,7 @@ model bookings {
   @@index([userId], map: "userId")
   @@index([placementId], map: "placementId")
   @@index([slotId], map: "slotId")
+  @@index([sizeId], map: "sizeId")
 }
 
 model bookingstatuses {
@@ -99,8 +101,8 @@ model users {
   phoneNumber                     String?     @db.VarChar(30)
   firstName                       String      @db.VarChar(100)
   lastName                        String      @db.VarChar(100)
-  password                        String      @db.VarChar(255)
   birthDate                       DateTime    @db.Date
+  password                        String      @db.VarChar(255)
   artists                         artists[]
   bookings_bookings_userIdTousers bookings[]  @relation("bookings_userIdTousers")
   favorites                       favorites[]
@@ -177,4 +179,10 @@ model tattoostyles {
 
   @@index([styleId], map: "styleId")
   @@index([tattooId], map: "tattooId")
+}
+
+model sizes {
+  sizeId   Int        @id @default(autoincrement())
+  size     String     @db.VarChar(50)
+  bookings bookings[]
 }
