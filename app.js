@@ -14,7 +14,7 @@ const citiesRouter = require('./routes/cities');
 const tattoosRouter = require('./routes/tattoos');
 const bookingStatusesRouter = require('./routes/bookingStatuses');
 const stylesRouter = require('./routes/styles');
-
+const placementsRouter = require('./routes/placements');
 
 const app = express();
 
@@ -38,7 +38,7 @@ app.use('/cities', citiesRouter);
 app.use('/tattoos', tattoosRouter);
 app.use('/bookingStatuses', bookingStatusesRouter);
 app.use('/styles', stylesRouter);
-
+app.use('/placements', placementsRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
