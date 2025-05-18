@@ -35,7 +35,11 @@ router.get('/me', authenticateToken, async (req, res) => {
             slotId: true,
             statusId: true,
             createdAt: true,
-            size: true,
+            sizes: {
+              select: {
+                size: true
+              }
+            },
             isColor: true,
             placementId: true,
             referenceURL: true,
@@ -166,7 +170,7 @@ router.get('/me', authenticateToken, async (req, res) => {
         },
         details: {
           status: booking.bookingstatuses.status,
-          size: booking.size,
+          size: booking.sizes.size,
           isColor: booking.isColor,
           placement: booking.placements?.placement,
           referenceURL: booking.referenceURL,
