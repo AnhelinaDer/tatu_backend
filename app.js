@@ -12,7 +12,7 @@ const artistsRouter = require('./routes/artists');
 const stripeRouter = require('./routes/stripe');
 const citiesRouter = require('./routes/cities');
 const tattoosRouter = require('./routes/tattoos');
-
+const bookingStatusesRouter = require('./routes/bookingStatuses');
 const app = express();
 
 // view engine setup
@@ -33,6 +33,9 @@ app.use('/artists', artistsRouter);
 app.use('/stripe', stripeRouter);
 app.use('/cities', citiesRouter);
 app.use('/tattoos', tattoosRouter);
+app.use('/bookingStatuses', bookingStatusesRouter);
+
+
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
