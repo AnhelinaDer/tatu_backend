@@ -17,6 +17,7 @@ const stylesRouter = require('./routes/styles');
 const placementsRouter = require('./routes/placements');
 const appointmentsRouter = require('./routes/appointments');
 const favoritesRouter = require('./routes/favorites');
+const sizesRouter = require('./routes/sizes');
 
 const app = express();
 
@@ -43,7 +44,7 @@ app.use('/styles', stylesRouter);
 app.use('/placements', placementsRouter);
 app.use('/appointments', appointmentsRouter);
 app.use('/favorites', favoritesRouter);
-
+app.use('/sizes', sizesRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
