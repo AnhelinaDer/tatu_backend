@@ -301,4 +301,77 @@ router.patch('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Delete tattoo
+router.delete('/:id', authenticateToken, async (req, res) => {
+  try {
+    const tattooId = parseInt(req.params.id);
+    const userId = req.user.userId;
+
+    if (isNaN(tattooId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid tattoo ID format'
+      });
+    }
+
+    // First, verify the tattoo exists and belongs to the authenticated artist
+    const existingTattoo = await prisma.tattoos.findUnique({
+      where: { tattooId },
+      select: {
+        users: {
+          select: {
+            userId: true,
+            artistId: true
+          }
+        }
+      }
+    });
+
+    if (!existingTattoo) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tattoo not found'
+      });
+    }
+
+    if (existingTattoo.users.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to delete this tattoo'
+      });
+    }
+
+    // Delete tattoo and related data in a transaction
+    await prisma.$transaction(async (prisma) => {
+      // Delete favorites referencing this tattoo
+      await prisma.favorites.deleteMany({
+        where: { tattooId }
+      });
+
+      // Delete tattoo styles
+      await prisma.tattoostyles.deleteMany({
+        where: { tattooId }
+      });
+
+      // Finally, delete the tattoo
+      await prisma.tattoos.delete({
+        where: { tattooId }
+      });
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Tattoo and all associated data successfully deleted'
+    });
+
+  } catch (err) {
+    console.error('DELETE /tattoos/:id error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete tattoo',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
 module.exports = router;
