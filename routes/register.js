@@ -24,7 +24,7 @@ router.post('/user', async (req, res) => {
     const existing = await prisma.users.findUnique({ where: { email } });
     if (existing) return res.status(409).json({ message: 'Email already in use.' });
 
-    const hashedPassword = password;//await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await prisma.users.create({
       data: {
