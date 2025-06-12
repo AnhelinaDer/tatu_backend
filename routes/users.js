@@ -150,6 +150,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       lastName: user.lastName,
       phoneNumber: user.phoneNumber,
       birthDate: user.birthDate,
+      isArtist: user.artists.length > 0,
       // Include artist profile if it exists
       artistProfile: user.artists.length > 0 ? {
         artistId: user.artists[0].artistId,

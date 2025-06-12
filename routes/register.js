@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 require('dotenv').config();
+const authenticateToken = require('../middleware/authMiddleware');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -20,6 +21,15 @@ router.post('/user', async (req, res) => {
       phoneNumber,
       birthDate
     } = req.body;
+
+    // Birth date validation
+    if (!birthDate) {
+      return res.status(400).json({ message: 'Birth date is required.' });
+    }
+    const dateParts = birthDate.split('-');
+    if (dateParts.length !== 3 || dateParts[1] === '00' || dateParts[2] === '00') {
+      return res.status(400).json({ message: 'Invalid birth date.' });
+    }
 
     const existing = await prisma.users.findUnique({ where: { email } });
     if (existing) return res.status(409).json({ message: 'Email already in use.' });
@@ -52,80 +62,44 @@ router.post('/user', async (req, res) => {
 
 
 // Register artist (requires Stripe payment first)
-router.post('/artist', async (req, res) => {
+router.post('/artist', authenticateToken, async (req, res) => {
   try {
-    const { session_id, password } = req.query;
-
-    if (!session_id || !password) {
-      return res.status(400).json({ message: 'Missing session ID or password.' });
+    // Accept JSON body instead of query parameters
+    const { artistDescription, cityId, styleIds } = req.body;
+    if (!artistDescription || !cityId || !styleIds) {
+      return res.status(400).json({ message: 'Missing required fields: artistDescription, cityId, and styleIds.' });
     }
-
-    // Get the Stripe session
-    const session = await stripe.checkout.sessions.retrieve(session_id);
-
-    if (session.payment_status !== 'paid') {
-      return res.status(403).json({ message: 'Payment not completed.' });
-    }
-
-    const data = session.metadata;
-
-    // Check if user exists
-    const existing = await prisma.users.findUnique({ where: { email: data.email } });
-    if (existing) {
-      return res.status(409).json({ message: 'Email already in use.' });
-    }
-
-    // Create user
-    const hashedPassword = data.password;//await bcrypt.hash(password, 10);
-    const user = await prisma.users.create({
-      data: {
-        email: data.email,
-        password: hashedPassword,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phoneNumber: data.phoneNumber,
-        birthDate: new Date(data.birthDate)
-      }
-    });
-
+    // Get the user ID from the token (assuming you have authentication middleware)
+    const userId = req.user.userId;
     // Create artist profile
     const artist = await prisma.artists.create({
       data: {
-        userId: user.userId,
-        cityId: parseInt(data.cityId),
-        artistDescription: data.artistDescription,
-        streetAddress: data.streetAddress,
-        instagramLink: data.instagramLink,
-        portfolioLink: data.portfolioLink,
-        imageURL: data.imageURL,
+        userId,
+        cityId: parseInt(cityId),
+        artistDescription,
         membershipFee: 49.99
       }
     });
-
     // Add artist styles
-    const styleIds = data.styleIds.split(',').map(id => parseInt(id));
     const styleLinks = styleIds.map(styleId => ({
       artistId: artist.artistId,
-      styleId
+      styleId: parseInt(styleId)
     }));
-
     await prisma.artiststyles.createMany({ data: styleLinks });
-
     // Issue token
     const token = jwt.sign(
-      { userId: user.userId, artistId: artist.artistId, isArtist: true },
+      { userId, artistId: artist.artistId, isArtist: true },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
-
     res.status(201).json({
-      message: 'Artist registered after successful payment.',
+      message: 'Artist registered successfully.',
       token,
       artistId: artist.artistId
     });
   } catch (err) {
-    console.error('Artist post-payment register error:', err);
-    res.status(500).json({ message: 'Registration failed after payment.' });
+    console.error('Artist register error:', err);
+    res.status(500).json({ message: 'Registration failed.' });
   }
 });
 
