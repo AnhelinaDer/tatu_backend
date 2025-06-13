@@ -12,10 +12,23 @@ router.post('/', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Check if user exists
+    console.log('Login attempt for email:', email);
+
+    // Check if user exists with complete artist profile data
     const user = await prisma.users.findUnique({
-      where: { email }
+      where: { email },
+      include: {
+        artists: {
+          select: {
+            artistId: true,
+            cityId: true,
+            artistDescription: true
+          }
+        }
+      }
     });
+
+    console.log('Found user:', JSON.stringify(user, null, 2));
 
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password.' });
@@ -27,12 +40,32 @@ router.post('/', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
-    // Create token
+    // Create token with artistId if user has an artist profile
+    const tokenPayload = {
+      userId: user.userId,
+      isArtist: false
+    };
+
+    // Check if user has an artist profile
+    if (user.artists && user.artists.length > 0) {
+      tokenPayload.isArtist = true;
+      tokenPayload.artistId = user.artists[0].artistId;
+      console.log('Found artist profile:', user.artists[0]);
+    } else {
+      console.log('No artist profile found');
+    }
+
+    console.log('Token payload:', tokenPayload);
+
     const token = jwt.sign(
-      { userId: user.userId, isArtist: user.isArtist },
+      tokenPayload,
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
+
+    // Add debug response to see token contents
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('Decoded token:', decodedToken);
 
     res.status(200).json({
       message: 'Login successful.',
@@ -40,9 +73,10 @@ router.post('/', async (req, res) => {
       user: {
         userId: user.userId,
         email: user.email,
-        isArtist: user.isArtist,
+        isArtist: tokenPayload.isArtist,
         firstName: user.firstName,
-        lastName: user.lastName
+        lastName: user.lastName,
+        artistId: tokenPayload.artistId || null
       }
     });
   } catch (err) {
