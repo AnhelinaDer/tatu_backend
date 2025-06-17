@@ -51,10 +51,19 @@ router.get('/me', authenticateToken, async (req, res) => {
                 users: {
                   select: {
                     firstName: true,
-                    lastName: true
+                    lastName: true,
+                    email: true,
+                    phoneNumber: true,
                   }
                 },
-                imageURL: true
+                cities: {
+                  select: {
+                    name: true,
+                    countryName: true
+                  }
+                },
+                imageURL: true,
+                streetAddress: true,
               }
             },
             // Include appointment info
@@ -162,7 +171,12 @@ router.get('/me', authenticateToken, async (req, res) => {
           artistId: booking.artistId,
           firstName: booking.users_bookings_artistIdTousers.users.firstName,
           lastName: booking.users_bookings_artistIdTousers.users.lastName,
-          imageURL: booking.users_bookings_artistIdTousers.imageURL
+          imageURL: booking.users_bookings_artistIdTousers.imageURL,
+          email: booking.users_bookings_artistIdTousers.users.email,
+          phoneNumber: booking.users_bookings_artistIdTousers.users.phoneNumber,
+          city: booking.users_bookings_artistIdTousers.cities?.name || 'Not specified',
+          country: booking.users_bookings_artistIdTousers.cities?.countryName || 'Not specified',
+          streetAddress: booking.users_bookings_artistIdTousers.streetAddress
         },
         appointment: {
           slotId: booking.slotId,

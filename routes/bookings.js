@@ -167,6 +167,8 @@ router.post('/', authenticateToken, async (req, res) => {
       }
     };
 
+    // Add artist notification
+
     res.status(201).json({
       success: true,
       message: 'Booking created successfully. Awaiting artist confirmation.',
@@ -214,12 +216,12 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Update booking status and price
-router.patch('/:id', authenticateToken, async (req, res) => {
+// Artist endpoint to set booking price
+router.patch('/:id/price', authenticateToken, async (req, res) => {
   try {
     const bookingId = parseInt(req.params.id);
     const userId = req.user.userId;
-    const { price, action } = req.body;
+    const { price } = req.body;
 
     if (isNaN(bookingId)) {
       return res.status(400).json({
@@ -248,190 +250,237 @@ router.patch('/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    // Check if user is either the artist or the client
+    // Check if user is the artist
     const isArtist = booking.users_bookings_artistIdTousers.userId === userId;
-    const isClient = booking.userId === userId;
 
-    if (!isArtist && !isClient) {
+    if (!isArtist) {
       return res.status(403).json({
         success: false,
-        message: 'You are not authorized to update this booking'
+        message: 'Only the artist can set the price'
       });
     }
 
-    // Handle artist actions (setting price)
-    if (isArtist) {
-      if (typeof price !== 'number' || price <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Valid price is required'
-        });
-      }
+    if (typeof price !== 'number' || price <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid price is required'
+      });
+    }
 
-      // Check if price is already set
-      if (booking.price) {
-        return res.status(400).json({
-          success: false,
-          message: 'Price is already set'
-        });
-      }
+    // Check if price is already set
+    if (booking.price) {
+      return res.status(400).json({
+        success: false,
+        message: 'Price is already set'
+      });
+    }
 
-      // Calculate commission (10% of price)
-      const commissionAmount = price * 0.10;
+    // Calculate commission (10% of price)
+    const commissionAmount = price * 0.10;
 
-      // Update booking with price and commission
-      const updatedBooking = await prisma.bookings.update({
-        where: { bookingId },
-        data: {
-          price,
-          commissionAmount,
-          statusId: 2 // Status: Quoted (awaiting client confirmation)
+    // Update booking with price and commission
+    const updatedBooking = await prisma.bookings.update({
+      where: { bookingId },
+      data: {
+        price,
+        commissionAmount,
+        statusId: 2 // Status: Quoted (awaiting client confirmation)
+      },
+      select: {
+        bookingId: true,
+        createdAt: true,
+        statusId: true,
+        price: true,
+        commissionAmount: true,
+        isColor: true,
+        referenceURL: true,
+        comment: true,
+        appointmentslots: {
+          select: {
+            dateTime: true,
+            duration: true
+          }
         },
-        select: {
-          bookingId: true,
-          createdAt: true,
-          statusId: true,
-          price: true,
-          commissionAmount: true,
-          isColor: true,
-          referenceURL: true,
-          comment: true,
-          appointmentslots: {
-            select: {
-              dateTime: true,
-              duration: true
-            }
-          },
-          users_bookings_artistIdTousers: {
-            select: {
-              artistId: true,
-              users: {
-                select: {
-                  firstName: true,
-                  lastName: true
-                }
-              },
-              imageURL: true
-            }
-          },
-          placements: {
-            select: {
-              placement: true
-            }
-          },
-          sizes: {
-            select: {
-              size: true
-            }
-          },
-          bookingstatuses: {
-            select: {
-              status: true
-            }
+        users_bookings_artistIdTousers: {
+          select: {
+            artistId: true,
+            users: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            imageURL: true
+          }
+        },
+        placements: {
+          select: {
+            placement: true
+          }
+        },
+        sizes: {
+          select: {
+            size: true
+          }
+        },
+        bookingstatuses: {
+          select: {
+            status: true
           }
         }
-      });
-
-      return res.status(200).json({
-        success: true,
-        message: 'Price set successfully. Awaiting client confirmation.',
-        booking: formatBookingResponse(updatedBooking)
-      });
-    }
-
-    // Handle client actions (confirm/decline)
-    if (isClient) {
-      if (!action || !['confirm', 'decline'].includes(action)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Valid action (confirm/decline) is required'
-        });
       }
+    });
 
-      // Verify booking has a price set
-      if (!booking.price) {
-        return res.status(400).json({
-          success: false,
-          message: 'Cannot confirm/decline booking without a price set'
-        });
-      }
-
-      const newStatusId = action === 'confirm' ? 3 : 4; // 3: Confirmed, 4: Declined
-
-      const updatedBooking = await prisma.bookings.update({
-        where: { bookingId },
-        data: {
-          statusId: newStatusId
-        },
-        select: {
-          bookingId: true,
-          createdAt: true,
-          statusId: true,
-          price: true,
-          commissionAmount: true,
-          isColor: true,
-          referenceURL: true,
-          comment: true,
-          appointmentslots: {
-            select: {
-              dateTime: true,
-              duration: true
-            }
-          },
-          users_bookings_artistIdTousers: {
-            select: {
-              artistId: true,
-              users: {
-                select: {
-                  firstName: true,
-                  lastName: true
-                }
-              },
-              imageURL: true
-            }
-          },
-          placements: {
-            select: {
-              placement: true
-            }
-          },
-          sizes: {
-            select: {
-              size: true
-            }
-          },
-          bookingstatuses: {
-            select: {
-              status: true
-            }
-          }
-        }
-      });
-
-      // If declined, free up the appointment slot
-      if (action === 'decline') {
-        await prisma.appointmentslots.update({
-          where: { slotId: booking.slotId },
-          data: { isBooked: false }
-        });
-      }
-
-      const message = action === 'confirm' 
-        ? 'Booking confirmed successfully'
-        : 'Booking declined successfully';
-
-      return res.status(200).json({
-        success: true,
-        message,
-        booking: formatBookingResponse(updatedBooking)
-      });
-    }
+    return res.status(200).json({
+      success: true,
+      message: 'Price set successfully. Awaiting client confirmation.',
+      booking: formatBookingResponse(updatedBooking)
+    });
 
   } catch (err) {
-    console.error('PATCH /bookings/:id error:', err);
+    console.error('PATCH /bookings/:id/price error:', err);
     res.status(500).json({
       success: false,
-      message: 'Failed to update booking',
+      message: 'Failed to set booking price',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Client endpoint to accept/decline booking
+router.patch('/:id/status', authenticateToken, async (req, res) => {
+  try {
+    const bookingId = parseInt(req.params.id);
+    const userId = req.user.userId;
+    const { action } = req.body;
+
+    if (isNaN(bookingId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid booking ID format'
+      });
+    }
+
+    // Fetch the booking with related data
+    const booking = await prisma.bookings.findUnique({
+      where: { bookingId },
+      include: {
+        users_bookings_artistIdTousers: {
+          select: {
+            userId: true,
+            artistId: true
+          }
+        }
+      }
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
+    }
+
+    // Check if user is the client
+    const isClient = booking.userId === userId;
+
+    if (!isClient) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the client can confirm or decline the booking'
+      });
+    }
+
+    if (!action || !['confirm', 'decline'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid action (confirm/decline) is required'
+      });
+    }
+
+    // Verify booking has a price set
+    if (!booking.price) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot confirm/decline booking without a price set'
+      });
+    }
+
+    const newStatusId = action === 'confirm' ? 3 : 4; // 3: Confirmed, 4: Declined
+
+    const updatedBooking = await prisma.bookings.update({
+      where: { bookingId },
+      data: {
+        statusId: newStatusId
+      },
+      select: {
+        bookingId: true,
+        createdAt: true,
+        statusId: true,
+        price: true,
+        commissionAmount: true,
+        isColor: true,
+        referenceURL: true,
+        comment: true,
+        appointmentslots: {
+          select: {
+            dateTime: true,
+            duration: true
+          }
+        },
+        users_bookings_artistIdTousers: {
+          select: {
+            artistId: true,
+            users: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            imageURL: true
+          }
+        },
+        placements: {
+          select: {
+            placement: true
+          }
+        },
+        sizes: {
+          select: {
+            size: true
+          }
+        },
+        bookingstatuses: {
+          select: {
+            status: true
+          }
+        }
+      }
+    });
+
+    // If declined, free up the appointment slot
+    if (action === 'decline') {
+      await prisma.appointmentslots.update({
+        where: { slotId: booking.slotId },
+        data: { isBooked: false }
+      });
+    }
+
+    const message = action === 'confirm' 
+      ? 'Booking confirmed successfully'
+      : 'Booking declined successfully';
+
+    return res.status(200).json({
+      success: true,
+      message,
+      booking: formatBookingResponse(updatedBooking)
+    });
+
+  } catch (err) {
+    console.error('PATCH /bookings/:id/status error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update booking status',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
@@ -464,5 +513,381 @@ function formatBookingResponse(booking) {
     }
   };
 }
+
+// Cancel booking
+router.patch('/:id/cancel', authenticateToken, async (req, res) => {
+  try {
+    const bookingId = parseInt(req.params.id);
+    const userId = req.user.userId;
+
+    if (isNaN(bookingId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid booking ID format'
+      });
+    }
+
+    const booking = await prisma.bookings.findUnique({
+      where: { bookingId },
+      include: {
+        users_bookings_artistIdTousers: {
+          select: {
+            userId: true,
+            artistId: true
+          }
+        }
+      }
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
+    }
+
+    const isClient = booking.userId === userId;
+    const isArtist = booking.users_bookings_artistIdTousers.userId === userId;
+
+    if (!isClient && !isArtist) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the client or artist can cancel the booking'
+      });
+    }
+
+    const updatedBooking = await prisma.bookings.update({
+      where: { bookingId },
+      data: { statusId: 5 },
+      select: {
+        bookingId: true,
+        createdAt: true,
+        statusId: true,
+        price: true,
+        commissionAmount: true,
+        isColor: true,
+        referenceURL: true,
+        comment: true,
+        appointmentslots: {
+          select: {
+            dateTime: true,
+            duration: true
+          }
+        },
+        users_bookings_artistIdTousers: {
+          select: {
+            artistId: true,
+            users: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            imageURL: true
+          }
+        },
+        placements: {
+          select: {
+            placement: true
+          }
+        },
+        sizes: {
+          select: {
+            size: true
+          }
+        },
+        bookingstatuses: {
+          select: {
+            status: true
+          }
+        }
+      }
+    });
+
+    // Free up the appointment slot
+    await prisma.appointmentslots.update({
+      where: { slotId: booking.slotId },
+      data: { isBooked: false }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Booking cancelled successfully',
+      booking: formatBookingResponse(updatedBooking)
+    });
+
+    
+  } catch (err) {
+    console.error('PATCH /bookings/:id/cancel error:', err);
+  }
+});
+
+// Get artist's bookings
+router.get('/artist', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // First, verify that the user is an artist
+    const artist = await prisma.artists.findFirst({
+      where: { userId },
+      select: { artistId: true }
+    });
+
+    if (!artist) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only artists can access their bookings'
+      });
+    }
+
+    // Fetch all bookings for this artist
+    const bookings = await prisma.bookings.findMany({
+      where: {
+        artistId: artist.artistId
+      },
+      select: {
+        bookingId: true,
+        createdAt: true,
+        statusId: true,
+        price: true,
+        commissionAmount: true,
+        isColor: true,
+        referenceURL: true,
+        comment: true,
+        // Include appointment details
+        appointmentslots: {
+          select: {
+            dateTime: true,
+            duration: true
+          }
+        },
+        // Include client details
+        users_bookings_userIdTousers: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true
+          }
+        },
+        // Include placement details
+        placements: {
+          select: {
+            placement: true
+          }
+        },
+        // Include size details
+        sizes: {
+          select: {
+            size: true
+          }
+        },
+        // Include status details
+        bookingstatuses: {
+          select: {
+            status: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Format the response
+    const formattedBookings = bookings.map(booking => ({
+      bookingId: booking.bookingId,
+      createdAt: booking.createdAt,
+      appointment: {
+        dateTime: booking.appointmentslots.dateTime,
+        duration: booking.appointmentslots.duration
+      },
+      client: {
+        firstName: booking.users_bookings_userIdTousers.firstName,
+        lastName: booking.users_bookings_userIdTousers.lastName,
+        email: booking.users_bookings_userIdTousers.email,
+        phoneNumber: booking.users_bookings_userIdTousers.phoneNumber
+      },
+      details: {
+        size: booking.sizes.size,
+        placement: booking.placements.placement,
+        isColor: booking.isColor,
+        referenceURL: booking.referenceURL,
+        comment: booking.comment,
+        status: booking.bookingstatuses.status,
+        price: booking.price,
+        commissionAmount: booking.commissionAmount
+      }
+    }));
+
+    res.status(200).json({
+      success: true,
+      bookings: formattedBookings
+    });
+
+  } catch (err) {
+    console.error('GET /bookings/artist error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch artist bookings',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Get specific booking details
+router.get('/:id', authenticateToken, async (req, res) => {
+  try {
+    const bookingId = parseInt(req.params.id);
+    const userId = req.user.userId;
+
+    if (isNaN(bookingId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid booking ID format'
+      });
+    }
+
+    // Fetch the booking with all related data
+    const booking = await prisma.bookings.findUnique({
+      where: { bookingId },
+      select: {
+        bookingId: true,
+        createdAt: true,
+        statusId: true,
+        price: true,
+        commissionAmount: true,
+        isColor: true,
+        referenceURL: true,
+        comment: true,
+        // Include appointment details
+        appointmentslots: {
+          select: {
+            dateTime: true,
+            duration: true
+          }
+        },
+        // Include artist details
+        users_bookings_artistIdTousers: {
+          select: {
+            artistId: true,
+            users: {
+              select: {
+                userId: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phoneNumber: true
+              }
+            },
+            cities: {
+              select: {
+                name: true,
+                countryName: true
+              }
+            },
+            imageURL: true,
+            streetAddress: true
+          }
+        },
+        // Include client details
+        users_bookings_userIdTousers: {
+          select: {
+            userId: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true
+          }
+        },
+        // Include placement details
+        placements: {
+          select: {
+            placement: true
+          }
+        },
+        // Include size details
+        sizes: {
+          select: {
+            size: true
+          }
+        },
+        // Include status details
+        bookingstatuses: {
+          select: {
+            status: true
+          }
+        }
+      }
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
+    }
+
+    // Check if user is either the client or the artist
+    const isClient = booking.users_bookings_userIdTousers.userId === userId;
+    const isArtist = booking.users_bookings_artistIdTousers.users.userId === userId;
+
+    if (!isClient && !isArtist) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to view this booking'
+      });
+    }
+
+    // Format the response
+    const formattedBooking = {
+      bookingId: booking.bookingId,
+      createdAt: booking.createdAt,
+      appointment: {
+        dateTime: booking.appointmentslots.dateTime,
+        duration: booking.appointmentslots.duration
+      },
+      artist: {
+        artistId: booking.users_bookings_artistIdTousers.artistId,
+        firstName: booking.users_bookings_artistIdTousers.users.firstName,
+        lastName: booking.users_bookings_artistIdTousers.users.lastName,
+        email: booking.users_bookings_artistIdTousers.users.email,
+        phoneNumber: booking.users_bookings_artistIdTousers.users.phoneNumber,
+        city: booking.users_bookings_artistIdTousers.cities?.name || 'Not specified',
+        country: booking.users_bookings_artistIdTousers.cities?.countryName || 'Not specified',
+        streetAddress: booking.users_bookings_artistIdTousers.streetAddress,
+        imageURL: booking.users_bookings_artistIdTousers.imageURL
+      },
+      client: {
+        firstName: booking.users_bookings_userIdTousers.firstName,
+        lastName: booking.users_bookings_userIdTousers.lastName,
+        email: booking.users_bookings_userIdTousers.email,
+        phoneNumber: booking.users_bookings_userIdTousers.phoneNumber
+      },
+      details: {
+        status: booking.bookingstatuses.status,
+        size: booking.sizes.size,
+        placement: booking.placements.placement,
+        isColor: booking.isColor,
+        referenceURL: booking.referenceURL,
+        comment: booking.comment,
+        price: booking.price,
+        commissionAmount: booking.commissionAmount
+      }
+    };
+    res.status(200).json({
+      success: true,
+      booking: formattedBooking
+    });
+
+  } catch (err) {
+    console.error('GET /bookings/:id error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch booking details',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
 
 module.exports = router;
