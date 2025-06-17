@@ -3,6 +3,43 @@ const { PrismaClient } = require('@prisma/client');
 const authenticateToken = require('../middleware/authMiddleware');
 const router = express.Router();
 const prisma = new PrismaClient();
+const multer = require('multer');
+const path = require('path');
+
+// 1) Configure Multer to save into ./uploads with a timestamped filename
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '../public/uploads/tattoos'));
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const name = `${Date.now()}${ext}`;
+    cb(null, name);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },     // max 5MB
+  fileFilter: (req, file, cb) => {
+    // only accept image mime types
+    if (/^image\/(jpe?g|png|gif|webp)$/.test(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'), false);
+    }
+  }
+});
+
+// 2) POST /savedars/preview — receives `tattoo` field
+router.post('/preview', upload.single('tattoo'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No file uploaded.' });
+  }
+  // Construct the public URL to the uploaded file
+  const imageUrl = `/uploads/tattoos/${req.file.filename}`;
+  res.status(201).json({ imageUrl });
+});
+
 
 // Add to saved AR images
 router.post('/', authenticateToken, async (req, res) => {
