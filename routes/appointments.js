@@ -202,4 +202,290 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Get available appointment slots
+router.get('/available', async (req, res) => {
+  try {
+    const { artistId, date } = req.query;
+
+    if (!artistId || !date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Artist ID and date are required'
+      });
+    }
+
+    // Validate date format
+    const selectedDate = new Date(date);
+    if (isNaN(selectedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+
+    // Set time range for the selected date
+    const startOfDay = new Date(selectedDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(selectedDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get available slots
+    const slots = await prisma.appointmentslots.findMany({
+      where: {
+        artistId: parseInt(artistId),
+        dateTime: {
+          gte: startOfDay,
+          lte: endOfDay
+        },
+        bookings: {
+          none: {} // Only get slots that aren't booked
+        }
+      },
+      select: {
+        slotId: true,
+        dateTime: true,
+        duration: true,
+
+      },
+      orderBy: {
+        dateTime: 'asc'
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      slots: slots.map(slot => ({
+        slotId: slot.slotId,
+        dateTime: slot.dateTime,
+        duration: slot.duration,
+
+      }))
+    });
+
+  } catch (err) {
+    console.error('GET /appointments/available error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch available slots',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Create new appointment slots
+router.post('/slots', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { date, slots } = req.body;
+
+    if (!date || !slots || !Array.isArray(slots)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date and slots array are required'
+      });
+    }
+
+    // Verify user is an artist
+    const artist = await prisma.artists.findFirst({
+      where: { userId },
+      select: { artistId: true }
+    });
+
+    if (!artist) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only artists can create appointment slots'
+      });
+    }
+
+    // Validate date format
+    const selectedDate = new Date(date);
+    if (isNaN(selectedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+
+    // Create slots
+    const createdSlots = await Promise.all(
+      slots.map(async (slot) => {
+        const dateTime = new Date(selectedDate);
+        const [hours, minutes] = slot.time.split(':').map(Number);
+        dateTime.setHours(hours, minutes, 0, 0);
+
+        return prisma.appointmentslots.create({
+          data: {
+            artistId: artist.artistId,
+            dateTime,
+            duration: slot.duration
+          }
+        });
+      })
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Appointment slots created successfully',
+      slots: createdSlots
+    });
+
+  } catch (err) {
+    console.error('POST /appointments/slots error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create appointment slots',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Delete appointment slot
+router.delete('/slots/:slotId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { slotId } = req.params;
+
+    // Verify user is an artist
+    const artist = await prisma.artists.findFirst({
+      where: { userId },
+      select: { artistId: true }
+    });
+
+    if (!artist) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only artists can delete appointment slots'
+      });
+    }
+
+    // Check if slot exists and belongs to the artist
+    const slot = await prisma.appointmentslots.findFirst({
+      where: {
+        slotId: parseInt(slotId),
+        artistId: artist.artistId
+      }
+    });
+
+    if (!slot) {
+      return res.status(404).json({
+        success: false,
+        message: 'Appointment slot not found'
+      });
+    }
+
+    // Check if slot is booked
+    const booking = await prisma.bookings.findFirst({
+      where: {
+        slotId: parseInt(slotId)
+      }
+    });
+
+    if (booking) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete a booked slot'
+      });
+    }
+
+    // Delete the slot
+    await prisma.appointmentslots.delete({
+      where: {
+        slotId: parseInt(slotId)
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Appointment slot deleted successfully'
+    });
+
+  } catch (err) {
+    console.error('DELETE /appointments/slots/:slotId error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete appointment slot',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Get artist's appointment slots
+router.get('/artist', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Verify the user is an artist
+    const artist = await prisma.artists.findFirst({
+      where: { userId },
+      select: { artistId: true }
+    });
+
+    if (!artist) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only artists can access their appointment slots'
+      });
+    }
+
+    // Get all slots for this artist
+    const slots = await prisma.appointmentslots.findMany({
+      where: {
+        artistId: artist.artistId,
+        dateTime: {
+          gte: new Date() // Only get future slots
+        }
+      },
+      select: {
+        slotId: true,
+        dateTime: true,
+        duration: true,
+        isBooked: true,
+        bookings: {
+          select: {
+            bookingId: true,
+            users_bookings_userIdTousers: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        dateTime: 'asc'
+      }
+    });
+
+    // Format the response
+    const formattedSlots = slots.map(slot => ({
+      id: slot.slotId,
+      dateTime: slot.dateTime,
+      duration: slot.duration,
+      isBooked: slot.isBooked,
+      booking: slot.bookings[0] ? {
+        bookingId: slot.bookings[0].bookingId,
+        client: {
+          firstName: slot.bookings[0].users_bookings_userIdTousers.firstName,
+          lastName: slot.bookings[0].users_bookings_userIdTousers.lastName
+        }
+      } : null
+    }));
+
+    res.status(200).json({
+      success: true,
+      slots: formattedSlots
+    });
+
+  } catch (err) {
+    console.error('GET /appointments/artist error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch appointment slots',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
 module.exports = router;
