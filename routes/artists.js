@@ -107,6 +107,11 @@ router.get('/', async (req, res) => {
               }
             }
           }
+        },
+        bookings_bookings_artistIdTousers: {
+          select: {
+            reviews: true
+          }
         }
       },
       orderBy: {
@@ -114,8 +119,26 @@ router.get('/', async (req, res) => {
       }
     });
 
+    // Calculate average rating for each artist
+    const artistsWithRatings = artists.map(artist => {
+      const reviews = artist.bookings_bookings_artistIdTousers.flatMap(booking => booking.reviews);
+      const totalRatings = reviews.reduce((sum, review) => sum + (review.rating || 0), 0);
+      const averageRating = reviews.length > 0 ? totalRatings / reviews.length : 0;
+      return { ...artist, rating: averageRating };
+    });
+
+    // Sort artistsWithRatings based on sortBy query param
+    const sortBy = req.query.sortBy;
+    if (sortBy === 'ratingDesc') {
+      artistsWithRatings.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
+    } else if (sortBy === 'ratingAsc') {
+      artistsWithRatings.sort((a, b) => (a.rating ?? 9999) - (b.rating ?? 9999));
+    } else if (sortBy === 'newest') {
+      artistsWithRatings.sort((a, b) => b.artistId - a.artistId);
+    }
+
     // Format the response
-    const formattedArtists = artists.map(artist => ({
+    const formattedArtists = artistsWithRatings.map(artist => ({
       artistId: artist.artistId,
       userId: artist.users.userId,
       firstName: artist.users.firstName,
@@ -136,7 +159,8 @@ router.get('/', async (req, res) => {
       styles: artist.artiststyles.map(as => ({
         id: as.styles.styleId,
         name: as.styles.styleName
-      }))
+      })),
+      rating: artist.rating
     }));
 
     res.status(200).json({
