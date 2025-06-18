@@ -830,6 +830,20 @@ router.get('/:id', authenticateToken, async (req, res) => {
           select: {
             status: true
           }
+        },
+        reviews: {
+          select: {
+            reviewId: true,
+            rating: true,
+            comment: true,
+            createdAt: true,
+            users: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
         }
       }
     });
@@ -886,7 +900,17 @@ router.get('/:id', authenticateToken, async (req, res) => {
         comment: booking.comment,
         price: booking.price,
         commissionAmount: booking.commissionAmount
-      }
+      },
+      review: booking.reviews[0] ? {
+        reviewId: booking.reviews[0].reviewId,
+        rating: booking.reviews[0].rating,
+        comment: booking.reviews[0].comment,
+        createdAt: booking.reviews[0].createdAt,
+        reviewer: {
+          firstName: booking.reviews[0].users.firstName,
+          lastName: booking.reviews[0].users.lastName
+        }
+      } : null
     };
     res.status(200).json({
       success: true,
