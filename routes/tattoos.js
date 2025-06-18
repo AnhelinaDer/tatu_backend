@@ -214,4 +214,52 @@ router.delete('/artists/tattoos/:tattooId', authenticateToken, async (req, res) 
   }
 });
 
+// Get all tattoos from all artists
+router.get('/', async (req, res) => {
+  try {
+    const tattoos = await prisma.tattoos.findMany({
+      include: {
+        users: {
+          select: {
+            artistId: true,
+            users: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        },
+        tattoostyles: {
+          include: {
+            styles: true
+          }
+        }
+      }
+    });
+
+    // Format tattoos for frontend
+    const formattedTattoos = tattoos.map(tattoo => ({
+      id: tattoo.tattooId,
+      title: tattoo.tattooName,
+      imageURL: tattoo.imageURL,
+      artistId: tattoo.users.artistId,
+      artist: {
+        artistId: tattoo.users.artistId,
+        firstName: tattoo.users.users.firstName,
+        lastName: tattoo.users.users.lastName
+      },
+      styles: tattoo.tattoostyles.map(ts => ({
+        id: ts.styles.styleId,
+        name: ts.styles.styleName
+      }))
+    }));
+
+    res.status(200).json({ tattoos: formattedTattoos });
+  } catch (error) {
+    console.error('Error fetching all tattoos:', error);
+    res.status(500).json({ message: 'Error fetching tattoos', error: error.message });
+  }
+});
+
 module.exports = router;
