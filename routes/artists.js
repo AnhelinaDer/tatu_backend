@@ -1,8 +1,43 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const authenticateToken = require('../middleware/authMiddleware');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// Configure multer for artist image upload
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '..', 'public/uploads/artists');
+    console.log('Artist upload directory:', uploadDir);
+    if (!fs.existsSync(uploadDir)) {
+      console.log('Creating artist upload directory');
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    console.log('Received artist image file:', file);
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Not an image! Please upload an image.'), false);
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
 
 router.get('/', async (req, res) => {
   try {
@@ -543,6 +578,104 @@ router.patch('/:id', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to update artist profile',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Upload artist profile image
+router.post('/:id/image', authenticateToken, upload.single('image'), async (req, res) => {
+  try {
+    const artistId = parseInt(req.params.id);
+    const userId = req.user.userId;
+
+    // Verify the artist exists and belongs to the authenticated user
+    const existingArtist = await prisma.artists.findUnique({
+      where: { artistId },
+      select: { userId, imageURL: true }
+    });
+
+    if (!existingArtist) {
+      // Delete the uploaded file if it exists
+      if (req.file) {
+        const filePath = path.join(__dirname, '..', 'public/uploads/artists', req.file.filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+      return res.status(404).json({
+        success: false,
+        message: 'Artist not found'
+      });
+    }
+
+    // Check if the authenticated user owns this artist profile
+    if (existingArtist.userId !== userId) {
+      // Delete the uploaded file if it exists
+      if (req.file) {
+        const filePath = path.join(__dirname, '..', 'public/uploads/artists', req.file.filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to update this artist profile'
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided'
+      });
+    }
+
+    const imageURL = `/uploads/artists/${req.file.filename}`;
+
+    // Delete old image if it exists
+    if (existingArtist.imageURL) {
+      const oldImagePath = path.join(__dirname, '..', 'public', existingArtist.imageURL);
+      if (fs.existsSync(oldImagePath)) {
+        fs.unlinkSync(oldImagePath);
+      }
+    }
+
+    // Update artist with new image URL
+    const updatedArtist = await prisma.artists.update({
+      where: { artistId },
+      data: { imageURL },
+      select: {
+        artistId: true,
+        imageURL: true,
+        users: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Artist image uploaded successfully',
+      imageURL: updatedArtist.imageURL
+    });
+
+  } catch (err) {
+    // Delete the uploaded file if there was an error
+    if (req.file) {
+      const filePath = path.join(__dirname, '..', 'public/uploads/artists', req.file.filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+    console.error('POST /artists/:id/image error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload artist image',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
