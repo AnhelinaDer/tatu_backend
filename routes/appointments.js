@@ -237,15 +237,12 @@ router.get('/available', async (req, res) => {
           gte: startOfDay,
           lte: endOfDay
         },
-        bookings: {
-          none: {} // Only get slots that aren't booked
-        }
+        isBooked: false
       },
       select: {
         slotId: true,
         dateTime: true,
-        duration: true,
-
+        duration: true
       },
       orderBy: {
         dateTime: 'asc'
@@ -257,8 +254,7 @@ router.get('/available', async (req, res) => {
       slots: slots.map(slot => ({
         slotId: slot.slotId,
         dateTime: slot.dateTime,
-        duration: slot.duration,
-
+        duration: slot.duration
       }))
     });
 

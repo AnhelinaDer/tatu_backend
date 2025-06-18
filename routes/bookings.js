@@ -48,6 +48,7 @@ router.post('/', authenticateToken, async (req, res) => {
           users: {
             select: {
               artistId: true,
+              userId: true,
               users: {
                 select: {
                   firstName: true,
@@ -65,6 +66,11 @@ router.post('/', authenticateToken, async (req, res) => {
 
       if (slot.isBooked) {
         throw new Error('This appointment slot is already booked');
+      }
+
+      // Check if user is trying to book with themselves
+      if (slot.users.userId === userId) {
+        throw new Error('You cannot book an appointment with yourself');
       }
 
       const now = new Date();
@@ -190,6 +196,13 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(409).json({
         success: false,
         message: 'This appointment slot is already booked'
+      });
+    }
+
+    if (err.message === 'You cannot book an appointment with yourself') {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot book an appointment with yourself'
       });
     }
 
