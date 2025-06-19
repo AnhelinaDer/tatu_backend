@@ -301,6 +301,14 @@ router.delete('/me', authenticateToken, async (req, res) => {
         await prisma.reviews.deleteMany({
           where: { bookingId: booking.bookingId }
         });
+
+        // Mark slot as available
+        await prisma.appointmentslots.update({
+          where: { slotId: booking.slotId },
+          data: {
+            isBooked: false
+          }
+        });
       }
 
       // Delete all bookings
