@@ -54,7 +54,16 @@ router.post('/create-booking-payment', authenticateToken, async (req, res) => {
       where: { bookingId: parseInt(bookingId) },
       include: {
         users_bookings_userIdTousers: true,
-        users_bookings_artistIdTousers: true,
+        users_bookings_artistIdTousers: {
+          include: {
+            users: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        },
         appointmentslots: true,
         sizes: true,
         placements: true
@@ -88,7 +97,7 @@ router.post('/create-booking-payment', authenticateToken, async (req, res) => {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: `Tattoo Booking with ${booking.users_bookings_artistIdTousers.firstName} ${booking.users_bookings_artistIdTousers.lastName}`,
+              name: `Tattoo Booking with ${booking.users_bookings_artistIdTousers.users.firstName} ${booking.users_bookings_artistIdTousers.users.lastName}`,
               description: `${booking.sizes.size} tattoo on ${booking.placements.placement}${booking.isColor ? ' (Color)' : ''}`,
             },
             unit_amount: Math.round(booking.price * 100), // Convert to cents
